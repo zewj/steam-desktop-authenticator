@@ -57,9 +57,11 @@ fn eresult_name(code: i64) -> &'static str {
 
 fn add_status_help(status: i64) -> String {
     match status {
-        2 => "Steam refused to add an authenticator. Usually the account has no phone \
-              number attached, or is too new. Add and verify a phone at \
-              https://store.steampowered.com/phone/manage and try again."
+        // Not necessarily a missing phone: Steam confirms by email when no
+        // phone is attached, and accounts without one enroll fine.
+        2 => "Steam refused to add an authenticator. The account may be too new, \
+              or restricted from changing Steam Guard right now. Waiting and \
+              retrying usually clears it."
             .into(),
         29 => "This account already has an authenticator attached. Remove it from the \
                Steam mobile app first, or use its revocation code."
@@ -709,9 +711,20 @@ mod tests {
 
     #[test]
     fn add_status_help_explains_each_failure() {
-        assert!(add_status_help(2).contains("phone"));
+        assert!(add_status_help(2).contains("too new"));
         assert!(add_status_help(29).contains("already has"));
         assert!(add_status_help(84).to_lowercase().contains("rate limit"));
+    }
+
+    #[test]
+    fn status_2_does_not_blame_a_missing_phone() {
+        // Steam confirms by email when no phone is attached; accounts without
+        // one enroll fine. Saying otherwise sends people off to add a phone
+        // they do not need.
+        assert!(
+            !add_status_help(2).to_lowercase().contains("phone"),
+            "status 2 should not claim a phone number is required"
+        );
     }
 
     #[test]

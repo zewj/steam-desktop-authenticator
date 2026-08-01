@@ -677,8 +677,11 @@ function stepCredentials() {
   wizardHTML(`
     <h2 id="wizard-title">Add a new authenticator</h2>
     <p>This attaches a brand-new Steam Guard authenticator to your account and
-       saves the .maFile here. Your account needs a verified phone number, and
-       any authenticator currently on your phone will be replaced.</p>
+       saves the .maFile here. Any authenticator currently on your phone will
+       be replaced.</p>
+    <p class="faint">Steam sends a confirmation code by SMS if the account has a
+       phone attached, or by email if it does not — a phone number is not
+       required.</p>
     <p class="faint">Your password is used once to sign in and is never saved.</p>
     <label for="w-account">Steam account name</label>
     <input type="text" id="w-account" autocomplete="off" />

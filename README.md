@@ -103,6 +103,11 @@ behind a dropdown, and it scales past two accounts.
 Adding an authenticator stays a modal dialog — it is a linear flow with a point
 of no return, not somewhere you browse to.
 
+A phone number is **not** required. Steam sends the activation code by SMS when
+a phone is attached and by email when one is not; accounts with no phone enroll
+fine. (An earlier version of these notes claimed otherwise, carried over from
+older SDA documentation.)
+
 The sidebar collapses to a 66px icon rail, remembered between runs. The toggle
 stays visible when collapsed; hiding it would leave no visible way back.
 
