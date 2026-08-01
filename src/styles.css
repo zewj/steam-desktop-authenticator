@@ -1,0 +1,738 @@
+/* Steam Desktop Authenticator — desktop shell.
+ *
+ * Collapsible sidebar + main pane. Deep slate with an electric blue accent,
+ * hueless background wash, Lucide-style stroke icons.
+ *
+ * Glass only reads if there is tonal variation behind it, so the page paints a
+ * neutral wash — a broad light from above, a shadow toward the floor — and
+ * panels are translucent layers over it. That makes contrast the hard part:
+ * text sits on a *composited* colour, not a flat one. check-contrast.py models
+ * the layer stack and verifies the worst case in both themes.
+ */
+
+:root {
+  color-scheme: dark;
+
+  --base: #0c131b;
+  --wash-a: rgba(255, 255, 255, 0.07);
+  --wash-b: rgba(255, 255, 255, 0.035);
+  --wash-c: rgba(0, 0, 0, 0.34);
+
+  /* Dark glass is a *dark* translucent layer, not white at low alpha. White
+     glass barely tints, so whatever is behind bleeds through and mid-tone text
+     collapses. Tinting dark keeps the composite in a narrow band. */
+  --glass: rgba(11, 18, 27, 0.62);
+  --glass-hi: rgba(22, 34, 48, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.13);
+  --glass-strong: rgba(9, 15, 23, 0.86);
+  --rail: rgba(9, 15, 23, 0.55);
+  --blur: 18px;
+
+  --text: #f0f6fc;
+  --muted: #b8c8d9;
+  --faint: #9fb3c8;
+  --accent: #4bb0f2;
+  --accent-hi: #7cc8ff;
+  --on-accent: #06121d;
+  --good: #57d189;
+  --warn: #f5bd3f;
+  --danger: #ff7b84;
+
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.42);
+  --radius: 14px;
+  --radius-sm: 9px;
+  --radius-pill: 999px;
+  --step: 200ms;
+  --rail-w: 232px;
+  --rail-w-collapsed: 66px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Semibold", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --base: #e9eef5;
+  --wash-a: rgba(255, 255, 255, 0.85);
+  --wash-b: rgba(255, 255, 255, 0.45);
+  --wash-c: rgba(24, 44, 68, 0.11);
+
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-hi: rgba(255, 255, 255, 0.86);
+  --glass-border: rgba(255, 255, 255, 0.92);
+  --glass-strong: rgba(255, 255, 255, 0.92);
+  --rail: rgba(255, 255, 255, 0.6);
+
+  --text: #0d1b28;
+  --muted: #3d5063;
+  --faint: #4a5d71;
+  --accent: #075a9c;
+  --accent-hi: #064a81;
+  --on-accent: #ffffff;
+  --good: #17683d;
+  --warn: #8a5a06;
+  --danger: #b3242f;
+
+  --shadow: 0 16px 40px rgba(31, 54, 82, 0.16);
+}
+
+* { box-sizing: border-box; }
+
+html { height: 100%; background: var(--base); }
+
+body {
+  margin: 0;
+  height: 100%;
+  background:
+    radial-gradient(130% 62% at 50% -12%, var(--wash-a), transparent 62%),
+    radial-gradient(90% 50% at 50% 20%, var(--wash-b), transparent 70%),
+    linear-gradient(180deg, transparent 42%, var(--wash-c) 100%),
+    var(--base);
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  user-select: none;
+  overflow: hidden;
+}
+
+button { font: inherit; color: inherit; }
+svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+#app { display: flex; height: 100%; }
+
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(var(--blur)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(150%);
+  border: 1px solid var(--glass-border);
+}
+
+/* ---------------------------------------------------------------- sidebar */
+
+#sidebar {
+  width: var(--rail-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 12px;
+  background: var(--rail);
+  backdrop-filter: blur(var(--blur)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(150%);
+  border-right: 1px solid var(--glass-border);
+  transition: width var(--step) var(--ease-out);
+  overflow: hidden;
+}
+#app.collapsed #sidebar { width: var(--rail-w-collapsed); }
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 12px;
+}
+.brand-mark { width: 21px; height: 21px; color: var(--accent); flex-shrink: 0; }
+.brand-name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.brand .rail-btn { margin-left: auto; }
+
+.rail-btn {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  transition: background var(--step), color var(--step), border-color var(--step);
+}
+.rail-btn:hover { background: var(--glass-hi); color: var(--text); border-color: var(--glass-border); }
+.rail-btn svg { width: 17px; height: 17px; }
+
+nav { display: flex; flex-direction: column; gap: 3px; }
+
+.nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 38px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--step), color var(--step);
+}
+.nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+.nav-item:hover { background: var(--glass-hi); color: var(--text); }
+.nav-item.active { background: var(--glass-hi); color: var(--text); }
+/* Active indicator: a rail on the leading edge, the desktop convention. */
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+}
+
+.rail-label {
+  margin: 14px 0 6px 12px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.account-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 11px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--step), border-color var(--step);
+}
+.account-row:hover { background: var(--glass-hi); }
+.account-row[aria-selected="true"] {
+  background: var(--glass-hi);
+  border-color: var(--glass-border);
+}
+.account-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--faint);
+  transition: background var(--step);
+}
+.account-row[aria-selected="true"] .account-dot { background: var(--accent); }
+.account-meta { min-width: 0; }
+.account-meta b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-meta span {
+  display: block;
+  font-size: 10.5px;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  margin-top: 8px;
+  padding: 0 12px;
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--step), color var(--step), border-color var(--step);
+}
+.add-btn:hover { background: var(--glass-hi); color: var(--text); border-color: var(--accent); }
+.add-btn svg { width: 17px; height: 17px; flex-shrink: 0; }
+
+/* Collapsed: icons only, labels folded away. */
+#app.collapsed .brand-name,
+#app.collapsed .rail-label,
+#app.collapsed .nav-item span,
+#app.collapsed .add-btn span,
+#app.collapsed .account-meta { display: none; }
+#app.collapsed .nav-item,
+#app.collapsed .add-btn { justify-content: center; padding: 0; }
+#app.collapsed .account-row { justify-content: center; padding: 9px 0; }
+#app.collapsed .account-dot { width: 9px; height: 9px; }
+#app.collapsed .brand { justify-content: center; padding: 4px 0 12px; }
+/* Collapsed, the toggle takes the brand's place. Hiding it would leave no
+   visible way back out — an affordance you cannot see is not an affordance. */
+#app.collapsed .brand-mark { display: none; }
+#app.collapsed .brand .rail-btn { margin-left: 0; }
+
+/* --------------------------------------------------------------- main pane */
+
+#pane { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 22px 10px;
+  flex-shrink: 0;
+}
+.titles { flex: 1; min-width: 0; }
+.titles h1 { font-family: var(--font-display); font-size: 19px; margin: 0; font-weight: 700; }
+.titles p { margin: 3px 0 0; font-size: 12px; color: var(--faint); }
+
+main { flex: 1; overflow-y: auto; padding: 6px 22px 4px; min-height: 0; }
+
+.view { display: none; }
+.view.active { display: grid; gap: 14px; animation: rise-in 300ms var(--ease-out) both; }
+
+.card {
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+
+/* Responsive: side-by-side once the window is wide enough for it. */
+#view-account.active { grid-template-columns: 1fr; }
+@media (min-width: 900px) {
+  #view-account.active { grid-template-columns: 1.15fr 1fr; align-items: start; }
+}
+
+.code-card { text-align: center; padding: 30px 24px 24px; }
+
+.code {
+  display: block;
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: clamp(38px, 7vw, 52px);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-indent: 0.14em;
+  background: none;
+  border: 0;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: var(--radius);
+  color: var(--text);
+  transition: color var(--step);
+}
+.code:hover { color: var(--accent); }
+
+.track {
+  height: 6px;
+  margin-top: 20px;
+  background: var(--glass-hi);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+/* Width, not transform: scaleX. Scaling leaves a 1px compositing seam of stale
+   colour along the track's top edge and squashes the pill cap. The bar is 6px
+   tall, so laying it out each frame costs nothing. */
+.fill {
+  height: 100%;
+  width: 100%;
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+  transition: background var(--step);
+}
+.fill.urgent { background: var(--warn); }
+
+.countdown {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.countdown.urgent { color: var(--warn); }
+
+.actions { display: flex; gap: 10px; justify-content: center; margin-top: 22px; }
+.actions.wide { flex-direction: column; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background var(--step), transform 90ms;
+}
+.btn svg { width: 16px; height: 16px; }
+.btn:hover { background: var(--accent-hi); }
+.btn:active { transform: translateY(1px); }
+.btn.ghost {
+  background: var(--glass-hi);
+  border: 1px solid var(--glass-border);
+  color: var(--text);
+}
+.btn.ghost:hover { background: var(--glass); border-color: var(--accent); }
+.btn.small { min-height: 34px; padding: 0 13px; font-size: 12px; }
+.btn:disabled { background: var(--glass-hi); color: var(--faint); cursor: default; }
+.btn-pair { display: flex; gap: 8px; flex-shrink: 0; }
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 18px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+  background: var(--glass-hi);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background var(--step), border-color var(--step);
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform var(--step), background var(--step);
+}
+.switch[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(18px); background: #fff; }
+
+/* empty state */
+.empty { text-align: center; padding: 40px 26px; }
+.empty-mark { width: 46px; height: 46px; color: var(--accent); }
+.empty h2 { font-family: var(--font-display); font-size: 19px; margin: 14px 0 0; }
+.empty p { color: var(--muted); font-size: 13px; margin: 9px 0 0; line-height: 1.55; }
+.empty code { font-family: var(--font-mono); font-size: 12px; }
+
+/* confirmations */
+.badge {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 700;
+  text-align: center;
+}
+#app.collapsed .badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  margin: 0;
+  min-width: 16px;
+  padding: 0 4px;
+  font-size: 9.5px;
+}
+
+.conf-bar { display: flex; justify-content: space-between; gap: 10px; }
+
+.conf {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 10px;
+}
+.conf img {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--glass-hi);
+}
+.conf-body { flex: 1; min-width: 0; }
+.conf-kind {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.conf-body b { display: block; font-size: 13.5px; margin-top: 3px; }
+.conf-body span {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+.conf .btn-pair { flex-shrink: 0; }
+.btn.deny { background: var(--glass-hi); border: 1px solid var(--glass-border); color: var(--danger); }
+.btn.deny:hover { background: var(--glass); border-color: var(--danger); }
+
+.notice { text-align: center; padding: 38px 26px; }
+.notice svg { width: 40px; height: 40px; color: var(--faint); }
+.notice h2 { font-family: var(--font-display); font-size: 17px; margin: 12px 0 0; }
+.notice p { color: var(--muted); font-size: 13px; margin: 9px 0 0; line-height: 1.55; }
+.notice.bad svg { color: var(--warn); }
+
+/* account view */
+.grid { display: grid; gap: 2px; }
+.grid .field {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--glass-border);
+  font-size: 13px;
+}
+.grid .field:last-child { border-bottom: 0; }
+.grid .field dt { color: var(--faint); flex-shrink: 0; }
+.grid .field dd {
+  margin: 0;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.card-head h3 { margin: 0; font-size: 14px; font-family: var(--font-display); }
+.danger-card { border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.plate {
+  margin: 14px 0 0;
+  padding: 15px;
+  text-align: center;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: var(--glass-hi);
+  font-family: var(--font-mono);
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--warn);
+  letter-spacing: 0.08em;
+  user-select: text;
+}
+.note { color: var(--muted); font-size: 12px; line-height: 1.55; margin: 12px 0 0; }
+.mono { font-family: var(--font-mono); }
+
+/* settings */
+.setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px 2px;
+  border-bottom: 1px solid var(--glass-border);
+}
+.setting:first-child { padding-top: 2px; }
+.setting:last-child { border-bottom: 0; padding-bottom: 2px; }
+.setting h3 { margin: 0; font-size: 13.5px; font-family: var(--font-display); }
+.setting p { margin: 4px 0 0; font-size: 12px; color: var(--faint); overflow-wrap: anywhere; }
+
+.segmented {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--glass-hi);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+.segmented button {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--step), color var(--step);
+}
+.segmented button:hover { color: var(--text); }
+.segmented button[aria-checked="true"] { background: var(--accent); color: var(--on-accent); }
+
+/* status bar */
+.status {
+  flex-shrink: 0;
+  margin: 6px 22px 16px;
+  padding: 9px 13px;
+  border-radius: var(--radius-sm);
+  color: var(--faint);
+  font-size: 11.5px;
+  min-height: 34px;
+  line-height: 1.4;
+}
+.status.good { color: var(--good); }
+.status.warn { color: var(--warn); }
+.status.error { color: var(--danger); }
+
+/* ---------------------------------------------------------------- dialogs */
+
+dialog {
+  width: min(470px, 92vw);
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  background: var(--glass-strong);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  box-shadow: var(--shadow);
+  color: var(--text);
+}
+dialog::backdrop { background: rgb(4 8 14 / 55%); backdrop-filter: blur(3px); }
+.dialog-body { padding: 4px 26px 26px; }
+dialog h2 { font-family: var(--font-display); font-size: 18px; margin: 18px 0 6px; }
+dialog p { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 9px 0 0; }
+dialog p.warn { color: var(--warn); font-weight: 600; }
+dialog p.faint { color: var(--faint); font-size: 12px; word-break: break-all; }
+dialog .btn { width: 100%; margin-top: 12px; }
+
+label { display: block; font-size: 11px; color: var(--muted); margin: 16px 0 5px; }
+input[type="text"], input[type="password"] {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  background: var(--glass-hi);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  user-select: text;
+}
+input:focus-visible { border-color: var(--accent); }
+
+.steps { display: flex; gap: 6px; padding: 18px 26px 0; }
+.steps div { flex: 1; font-size: 11px; color: var(--faint); }
+.steps div::before {
+  content: "";
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--glass-hi);
+  margin-bottom: 6px;
+  transition: background var(--step);
+}
+.steps div.done { color: var(--text); }
+.steps div.done::before { background: var(--accent); }
+
+.hidden { display: none !important; }
+
+.pulse { animation: sweep 1.4s ease-in-out infinite; }
+@keyframes sweep {
+  0%   { transform: scaleX(0.15); opacity: 0.7; }
+  50%  { transform: scaleX(0.75); opacity: 1; }
+  100% { transform: scaleX(0.15); opacity: 0.7; }
+}
+
+/* ------------------------------------------------------------- animations */
+
+/* Every animation says something — a code replaced itself, a surface came from
+ * somewhere, a step moved forward. Nothing loops, nothing decorates. Transform
+ * and opacity only, so each runs on the compositor; the one layout-animating
+ * property is the progress fill's width, deliberately (see .fill).
+ * Exits are quicker than entrances.
+ */
+@keyframes rise-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes code-in { from { opacity: 0; transform: translateY(-7px); } to { opacity: 1; transform: none; } }
+@keyframes pop { 50% { transform: scale(1.05); } }
+@keyframes surface-in { from { opacity: 0; transform: translateY(9px) scale(0.975); } to { opacity: 1; transform: none; } }
+@keyframes surface-out { to { opacity: 0; transform: translateY(5px) scale(0.985); } }
+@keyframes veil-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes step-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.code.rotated { animation: code-in 260ms var(--ease-out); }
+.code.copied { animation: pop 260ms var(--ease-out); }
+
+dialog[open] { animation: surface-in 220ms var(--ease-out); }
+dialog[open]::backdrop { animation: veil-in 200ms ease-out; }
+dialog.closing { animation: surface-out 150ms var(--ease-in) forwards; }
+dialog.closing::backdrop { animation: veil-in 150ms ease-in reverse forwards; }
+
+.step-enter { animation: step-in 250ms var(--ease-out); }
+.status.flash { animation: fade-in 220ms ease-out; }
+
+.theming, .theming * {
+  transition: background-color 260ms ease, color 260ms ease,
+              border-color 260ms ease, box-shadow 260ms ease !important;
+}
+
+/* ------------------------------------------------------- user preferences */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .pulse { animation: none; transform: scaleX(0.6); }
+}
+
+/* High contrast: drop the glass. Translucency is the one thing forced-colors
+   cannot rescue — blur survives, contrast does not. */
+@media (forced-colors: active) {
+  body { background: Canvas; }
+  .glass, .card, dialog, #sidebar, .btn, .switch, .track, input, .segmented {
+    background: Canvas;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid CanvasText;
+    box-shadow: none;
+  }
+  .fill, .switch[aria-checked="true"], .nav-item.active::before,
+  .segmented button[aria-checked="true"] { background: Highlight; }
+  .nav-item.active, .account-row[aria-selected="true"] { border: 1px solid Highlight; }
+  .code, .countdown, .status { color: CanvasText; }
+  :focus-visible { outline: 2px solid Highlight; }
+}

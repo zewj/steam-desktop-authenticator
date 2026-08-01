@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window. Deliberately narrow: the webview gets file pickers and clipboard write, nothing else. Secrets are read and used in Rust and never cross the IPC boundary.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "opener:allow-open-path",
+    "dialog:allow-open",
+    "clipboard-manager:allow-write-text",
+    "core:window:allow-set-theme"
+  ]
+}

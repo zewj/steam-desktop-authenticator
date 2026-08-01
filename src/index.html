@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Steam Desktop Authenticator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Icon sprite: Lucide-style 24x24 stroke geometry, referenced with <use>. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <g id="i-shield"><path d="M12 3l7 3v5.5c0 4.3-2.9 8.3-7 9.5-4.1-1.2-7-5.2-7-9.5V6l7-3z"/></g>
+      <g id="i-user"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20a7.4 7.4 0 0 1 14.4 0"/></g>
+      <g id="i-settings"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 8 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H2a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 3.6 8a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H8a1.6 1.6 0 0 0 1-1.5V2a2 2 0 1 1 4 0v.1A1.6 1.6 0 0 0 16 3.6a1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V8a1.6 1.6 0 0 0 1.5 1H22a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></g>
+      <g id="i-plus"><path d="M12 5v14M5 12h14"/></g>
+      <g id="i-panel"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9.5 4v16"/></g>
+      <g id="i-copy"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M5.5 15H5a1.8 1.8 0 0 1-1.8-1.8V5.3A1.8 1.8 0 0 1 5 3.5h7.9A1.8 1.8 0 0 1 14.7 5.3v.5"/></g>
+      <g id="i-check"><path d="M4.5 12.5l5 5 10-11"/></g>
+      <g id="i-sun"><circle cx="12" cy="12" r="4.4"/><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4L17 7M7 17l-1.6 1.6"/></g>
+      <g id="i-moon"><path d="M20 13.2A8 8 0 1 1 10.8 4a6.6 6.6 0 0 0 9.2 9.2z"/></g>
+      <g id="i-clock"><circle cx="12" cy="12" r="8.6"/><path d="M12 7.2V12l3.2 2"/></g>
+      <g id="i-folder"><path d="M3.5 7.5A1.8 1.8 0 0 1 5.3 5.7h3.4l1.9 2.3h8.1a1.8 1.8 0 0 1 1.8 1.8v7.7a1.8 1.8 0 0 1-1.8 1.8H5.3a1.8 1.8 0 0 1-1.8-1.8z"/></g>
+      <g id="i-eye"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></g>
+      <g id="i-eye-off"><path d="M10.7 6.1A8.9 8.9 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-3.2 3.9M6.4 6.5A16 16 0 0 0 2.5 12S6 18 12 18a8.8 8.8 0 0 0 3.5-.7"/><path d="M3 3l18 18"/></g>
+      <g id="i-refresh"><path d="M20.5 11a8.5 8.5 0 0 0-14.6-4.6L3.5 8.7"/><path d="M3.5 13a8.5 8.5 0 0 0 14.6 4.6l2.4-2.3"/><path d="M3.5 4v4.7h4.7M20.5 20v-4.7h-4.7"/></g>
+      <g id="i-key"><circle cx="8" cy="15.5" r="3.6"/><path d="M10.6 13l7.4-7.4M15.5 8.1l2 2M18 5.6l2 2"/></g>
+      <g id="i-file"><path d="M13.5 3.5H7a1.8 1.8 0 0 0-1.8 1.8v13.4A1.8 1.8 0 0 0 7 20.5h10a1.8 1.8 0 0 0 1.8-1.8V8.8z"/><path d="M13.5 3.5v5.3h5.3"/></g>
+      <g id="i-swap"><path d="M7.5 4.5L3.5 8.5l4 4"/><path d="M3.5 8.5h17"/><path d="M16.5 19.5l4-4-4-4"/><path d="M20.5 15.5h-17"/></g>
+      <g id="i-x"><path d="M6 6l12 12M18 6L6 18"/></g>
+      <g id="i-inbox"><path d="M3.5 13.5h4l1.5 3h6l1.5-3h4"/><path d="M5.4 5.9 3.5 13.5v4.2a1.8 1.8 0 0 0 1.8 1.8h13.4a1.8 1.8 0 0 0 1.8-1.8v-4.2L18.6 5.9a1.8 1.8 0 0 0-1.6-1.1H7a1.8 1.8 0 0 0-1.6 1.1z"/></g>
+    </defs>
+  </svg>
+
+  <div id="app">
+    <!-- ------------------------------------------------------------ sidebar -->
+    <aside id="sidebar">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-shield"/></svg>
+        <span class="brand-name">Authenticator</span>
+        <button class="rail-btn" id="collapse-btn" aria-label="Collapse sidebar" title="Collapse sidebar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-panel"/></svg>
+        </button>
+      </div>
+
+      <nav aria-label="Sections">
+        <button class="nav-item active" data-view="codes">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-shield"/></svg>
+          <span>Codes</span>
+        </button>
+        <!--
+          Confirmations is built but parked: Steam refuses a community session
+          for the token saved at enrollment (EResult 15 from both
+          GenerateAccessTokenForApp and jwt/finalizelogin; needauth from
+          mobileconf directly), so the section could only ever show an error.
+          The Rust module, its tests and the view below are all intact — undo
+          this comment to bring it back once a web login exists.
+        <button class="nav-item" data-view="confirmations">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-swap"/></svg>
+          <span>Confirmations</span>
+          <em class="badge hidden" id="conf-badge">0</em>
+        </button>
+        -->
+        <em class="badge hidden" id="conf-badge">0</em>
+        <button class="nav-item" data-view="account">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-user"/></svg>
+          <span>Account</span>
+        </button>
+        <button class="nav-item" data-view="settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-settings"/></svg>
+          <span>Settings</span>
+        </button>
+      </nav>
+
+      <p class="rail-label">Accounts</p>
+      <div class="account-list" id="account-list" role="listbox" aria-label="Accounts"></div>
+
+      <button class="add-btn" id="new-btn">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg>
+        <span>New authenticator</span>
+      </button>
+    </aside>
+
+    <!-- --------------------------------------------------------- main pane -->
+    <div id="pane">
+      <header>
+        <div class="titles">
+          <h1 id="view-title">Codes</h1>
+          <p id="view-sub"></p>
+        </div>
+        <button class="rail-btn" id="theme-btn" aria-label="Switch theme">
+          <svg id="theme-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sun"/></svg>
+        </button>
+        <button class="rail-btn" id="sync-btn" aria-label="Sync time with Steam" title="Sync time with Steam">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-refresh"/></svg>
+        </button>
+      </header>
+
+      <main>
+        <!-- ---------------------------------------------------- codes view -->
+        <section class="view active" id="view-codes">
+          <div class="card glass code-card" id="code-card">
+            <button class="code" id="code" aria-live="polite" title="Click to copy">&mdash;</button>
+            <div class="track"><div class="fill" id="fill"></div></div>
+            <p class="countdown" id="countdown"></p>
+            <div class="actions">
+              <button class="btn primary" id="copy-btn">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-copy"/></svg>
+                <span>Copy code</span>
+              </button>
+            </div>
+            <div class="row">
+              <span id="autocopy-label">Auto-copy on rotate</span>
+              <button class="switch" id="autocopy" role="switch" aria-checked="false"
+                      aria-labelledby="autocopy-label"></button>
+            </div>
+          </div>
+
+          <div class="empty glass card" id="empty-view">
+            <svg class="empty-mark" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-key"/></svg>
+            <h2>No authenticator yet</h2>
+            <p>Create one for your Steam account, or open an <code>.maFile</code> you already have.</p>
+            <div class="actions wide">
+              <button class="btn primary" id="empty-create">Create authenticator</button>
+              <button class="btn ghost" id="empty-open">Open .maFile</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- --------------------------------------------- confirmations view -->
+        <section class="view" id="view-confirmations">
+          <div class="conf-bar">
+            <button class="btn ghost small" id="conf-refresh">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-refresh"/></svg>
+              <span>Refresh</span>
+            </button>
+            <div class="btn-pair" id="conf-bulk">
+              <button class="btn ghost small" id="conf-allow-all">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg>
+                <span>Confirm all</span>
+              </button>
+            </div>
+          </div>
+          <div id="conf-list"></div>
+        </section>
+
+        <!-- -------------------------------------------------- account view -->
+        <section class="view" id="view-account">
+          <div class="card glass" id="account-card">
+            <div class="grid" id="account-grid"></div>
+          </div>
+          <div class="card glass danger-card" id="revocation-card">
+            <div class="card-head">
+              <h3>Revocation code</h3>
+              <button class="btn ghost small" id="reveal-btn">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-eye"/></svg>
+                <span>Reveal</span>
+              </button>
+            </div>
+            <p class="mono plate" id="revocation-value">••••••</p>
+            <p class="note">The only way to detach this authenticator if you lose the file.
+               Steam shows it once. Keep a copy somewhere that is not this machine.</p>
+          </div>
+        </section>
+
+        <!-- ------------------------------------------------- settings view -->
+        <section class="view" id="view-settings">
+          <div class="card glass">
+            <div class="setting">
+              <div><h3>Theme</h3><p>Light, dark, or follow Windows.</p></div>
+              <div class="segmented" id="theme-seg" role="radiogroup" aria-label="Theme">
+                <button data-theme-choice="light" role="radio" aria-checked="false">Light</button>
+                <button data-theme-choice="dark" role="radio" aria-checked="false">Dark</button>
+                <button data-theme-choice="system" role="radio" aria-checked="false">System</button>
+              </div>
+            </div>
+            <div class="setting">
+              <div><h3>Auto-copy</h3><p>Put each new code on the clipboard as it rotates.</p></div>
+              <button class="switch" id="autocopy2" role="switch" aria-checked="false"
+                      aria-label="Auto-copy on rotate"></button>
+            </div>
+          </div>
+
+          <div class="card glass">
+            <div class="setting">
+              <div><h3>Steam clock</h3><p id="clock-detail">Not checked yet.</p></div>
+              <button class="btn ghost small" id="sync-btn2">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-clock"/></svg>
+                <span>Sync now</span>
+              </button>
+            </div>
+            <div class="setting">
+              <div><h3>maFiles folder</h3><p class="mono" id="dir-detail">—</p></div>
+              <div class="btn-pair">
+                <button class="btn ghost small" id="open-folder">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-folder"/></svg>
+                  <span>Open folder</span>
+                </button>
+                <button class="btn ghost small" id="open-file">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-file"/></svg>
+                  <span>Open .maFile</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <p class="status glass" id="status" role="status" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <!-- ------------------------------------------------------- enroll wizard -->
+  <dialog id="wizard" aria-labelledby="wizard-title">
+    <div class="steps" id="wizard-steps">
+      <div>Sign in</div><div>Confirm</div><div>Attach</div><div>Activate</div>
+    </div>
+    <div class="dialog-body" id="wizard-body"></div>
+  </dialog>
+
+  <dialog id="passkey-dialog" aria-labelledby="passkey-title">
+    <div class="dialog-body">
+      <h2 id="passkey-title">Encrypted account file</h2>
+      <p>These maFiles are encrypted. Enter the SDA passkey to unlock them.</p>
+      <label for="passkey-input">Passkey</label>
+      <input type="password" id="passkey-input" autocomplete="off" />
+      <button class="btn primary" id="passkey-ok">Unlock</button>
+      <button class="btn ghost" id="passkey-cancel">Cancel</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
