@@ -57,6 +57,7 @@ pub struct Account {
     pub revocation_code: String,
     pub device_id: String,
     pub refresh_token: String,
+    pub access_token: String,
     pub path: PathBuf,
 }
 
@@ -107,10 +108,16 @@ impl Account {
 struct RawSession {
     #[serde(default, alias = "steamid", alias = "SteamID")]
     steam_id: Option<serde_json::Value>,
-    /// Written at enrollment. Confirmations need a steamcommunity.com session,
-    /// which this is exchanged for; codes alone never touch it.
+    /// Legacy field name, and what this app wrote before it learned better.
     #[serde(default, alias = "oauth_token", alias = "OAuthToken")]
     oauth_token: Option<String>,
+    /// The shape current SDA writes: the two tokens kept separately. The
+    /// access token is the one the community site accepts; the refresh token
+    /// mints a new one when it expires (they last about 24 hours).
+    #[serde(default, alias = "access_token", alias = "AccessToken")]
+    access_token: Option<String>,
+    #[serde(default, alias = "refresh_token", alias = "RefreshToken")]
+    refresh_token: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -170,13 +177,71 @@ fn parse_account(text: &str, path: &Path) -> Result<Account, MaFileError> {
         steamid,
         revocation_code: raw.revocation_code.unwrap_or_default(),
         device_id: raw.device_id.unwrap_or_default(),
+        // Prefer SDA's RefreshToken; fall back to the legacy OAuthToken slot,
+        // which is where this app used to put the refresh token.
         refresh_token: raw
             .session
             .as_ref()
-            .and_then(|s| s.oauth_token.clone())
+            .and_then(|s| s.refresh_token.clone().or_else(|| s.oauth_token.clone()))
+            .unwrap_or_default(),
+        access_token: raw
+            .session
+            .as_ref()
+            .and_then(|s| s.access_token.clone())
             .unwrap_or_default(),
         path: path.to_path_buf(),
     })
+}
+
+/// Write refreshed session tokens back into an .maFile.
+///
+/// Rewrites only the Session block and leaves every other field byte-identical,
+/// because this file is the account's authenticator: losing `shared_secret` or
+/// `revocation_code` while updating a login token would be catastrophic.
+pub fn update_session_tokens(
+    path: &Path,
+    access: &str,
+    refresh: &str,
+) -> Result<(), MaFileError> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| MaFileError::Io(format!("{}: {e}", path.display())))?;
+    let mut data: serde_json::Value = serde_json::from_str(text.trim_start_matches('\u{feff}'))
+        .map_err(|e| MaFileError::Malformed(format!("{}: {e}", path.display())))?;
+
+    if !data.get("shared_secret").map(|v| v.is_string()).unwrap_or(false) {
+        return Err(MaFileError::Malformed(
+            "refusing to rewrite a file with no shared_secret".into(),
+        ));
+    }
+
+    let session = data
+        .get_mut("Session")
+        .and_then(|s| s.as_object_mut())
+        .ok_or_else(|| MaFileError::Malformed("no Session block to update".into()))?;
+
+    session.insert("AccessToken".into(), serde_json::json!(access));
+    session.insert("RefreshToken".into(), serde_json::json!(refresh));
+    // Keep the legacy slot in step so older readers see the current token.
+    session.insert("OAuthToken".into(), serde_json::json!(refresh));
+
+    let pretty = serde_json::to_string_pretty(&data)
+        .map_err(|e| MaFileError::Malformed(e.to_string()))?;
+
+    // Write beside the original and swap, so an interrupted write cannot leave
+    // a truncated authenticator behind.
+    let temp = path.with_extension("maFile.tmp");
+    {
+        use std::io::Write;
+        let mut file = std::fs::File::create(&temp)
+            .map_err(|e| MaFileError::Io(format!("{}: {e}", temp.display())))?;
+        file.write_all(pretty.as_bytes())
+            .and_then(|_| file.flush())
+            .and_then(|_| file.sync_all())
+            .map_err(|e| MaFileError::Io(format!("{}: {e}", temp.display())))?;
+    }
+    std::fs::rename(&temp, path)
+        .map_err(|e| MaFileError::Io(format!("{}: {e}", path.display())))?;
+    Ok(())
 }
 
 pub fn derive_key(passkey: &str, salt_b64: &str) -> Result<Vec<u8>, MaFileError> {

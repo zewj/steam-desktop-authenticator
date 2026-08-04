@@ -443,6 +443,117 @@ pub async fn poll_login(state: EnrollState<'_>) -> Result<bool, String> {
     Ok(true)
 }
 
+/// Sign in again for an account that already has an authenticator, to refresh
+/// its saved session tokens.
+///
+/// Only the password is needed: this app holds the account's `shared_secret`,
+/// so it answers Steam's own Guard prompt itself.
+pub async fn refresh_session(
+    account_name: &str,
+    password: &str,
+    shared_secret: &str,
+) -> Result<(String, String), SteamError> {
+    if account_name.is_empty() || password.is_empty() {
+        return Err(SteamError::new("Account name and password are both required."));
+    }
+
+    let key = call(
+        "/IAuthenticationService/GetPasswordRSAPublicKey/v1/",
+        &[("account_name", account_name.to_string())],
+        None,
+    )
+    .await?;
+
+    let modulus = str_field(&key, "publickey_mod");
+    if modulus.is_empty() {
+        return Err(SteamError::new(
+            "Steam did not return an encryption key for that account name.",
+        ));
+    }
+    let encrypted = encrypt_password(password, &modulus, &str_field(&key, "publickey_exp"))?;
+
+    let device = "Steam Desktop Authenticator".to_string();
+    let session = call(
+        "/IAuthenticationService/BeginAuthSessionViaCredentials/v1/",
+        &[
+            ("account_name", account_name.to_string()),
+            ("encrypted_password", encrypted),
+            ("encryption_timestamp", str_field(&key, "timestamp")),
+            ("remember_login", "1".into()),
+            ("persistence", "1".into()),
+            ("website_id", "Mobile".into()),
+            ("platform_type", "3".into()),
+            ("device_friendly_name", device.clone()),
+            ("device_details[device_friendly_name]", device),
+            ("device_details[platform_type]", "3".into()),
+            ("device_details[os_type]", "-500".into()),
+        ],
+        None,
+    )
+    .await?;
+
+    let client_id = str_field(&session, "client_id");
+    let request_id = str_field(&session, "request_id");
+    let steamid = str_field(&session, "steamid");
+    if client_id.is_empty() || request_id.is_empty() {
+        return Err(SteamError::new(
+            "Steam accepted the password but returned no login session.",
+        ));
+    }
+
+    let wants_device_code = session
+        .get("allowed_confirmations")
+        .and_then(|v| v.as_array())
+        .map(|list| {
+            list.iter().any(|c| {
+                c.get("confirmation_type").and_then(|t| t.as_i64()) == Some(GUARD_DEVICE_CODE)
+            })
+        })
+        .unwrap_or(false);
+
+    if wants_device_code {
+        let offset = query_time_offset().await.unwrap_or(0);
+        let code = crate::totp::generate_auth_code(shared_secret, now() + offset)
+            .map_err(|e| SteamError::new(format!("could not generate a Guard code: {e}")))?;
+        call(
+            "/IAuthenticationService/UpdateAuthSessionWithSteamGuardCode/v1/",
+            &[
+                ("client_id", client_id.clone()),
+                ("steamid", steamid.clone()),
+                ("code", code),
+                ("code_type", GUARD_DEVICE_CODE.to_string()),
+            ],
+            None,
+        )
+        .await?;
+    }
+
+    // Poll until Steam hands over the tokens. Anything needing approval
+    // elsewhere (email link, mobile confirm) resolves here too.
+    for _ in 0..40 {
+        let result = call(
+            "/IAuthenticationService/PollAuthSessionStatus/v1/",
+            &[
+                ("client_id", client_id.clone()),
+                ("request_id", request_id.clone()),
+            ],
+            None,
+        )
+        .await?;
+
+        let access = str_field(&result, "access_token");
+        let refresh = str_field(&result, "refresh_token");
+        if !access.is_empty() || !refresh.is_empty() {
+            return Ok((access, refresh));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(2500)).await;
+    }
+
+    Err(SteamError::new(
+        "Timed out waiting for Steam to approve the sign-in.",
+    ))
+}
+
 #[tauri::command]
 pub fn enrollment_target_dir() -> String {
     target_dir().to_string_lossy().to_string()
@@ -519,10 +630,16 @@ pub async fn add_authenticator(state: EnrollState<'_>) -> Result<EnrollResult, S
         "status": status,
         "device_id": device,
         "fully_enrolled": false,
+        // Both tokens, in the shape current SDA writes. Storing only the
+        // refresh token (as this app first did) throws away the one the
+        // community site actually accepts, which is what confirmations need.
+        // OAuthToken is kept so older readers still find something.
         "Session": {
             "SteamID": steamid.parse::<u64>().unwrap_or(0),
-            "OAuthToken": if refresh.is_empty() { access_token.clone() } else { refresh },
-            "SessionID": "", "SteamLogin": "", "SteamLoginSecure": "", "WebCookie": ""
+            "AccessToken": access_token,
+            "RefreshToken": refresh,
+            "SessionID": "",
+            "OAuthToken": if refresh.is_empty() { access_token.clone() } else { refresh.clone() }
         }
     });
 

@@ -14,6 +14,7 @@
 
 use crate::mafile::Account;
 use crate::totp;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -117,16 +118,42 @@ fn value_to_string(value: &serde_json::Value) -> String {
     }
 }
 
-/// Trade the stored refresh token for a community access token.
+/// Seconds until a Steam JWT expires; negative once it has.
+fn seconds_until_expiry(token: &str) -> Option<i64> {
+    // base64url, and Steam sometimes pads it — trim so either form decodes.
+    let payload = token.split('.').nth(1)?.trim_end_matches('=');
+    let decoded = URL_SAFE_NO_PAD.decode(payload).ok()?;
+    let claims: serde_json::Value = serde_json::from_slice(&decoded).ok()?;
+    Some(claims.get("exp")?.as_i64()? - now())
+}
+
+/// A community access token for this account.
 ///
-/// The `steamLoginSecure` cookie is `steamid||access_token`; the community
-/// site will not accept the plain WebAPI token.
+/// Mirrors what the reference implementation does: use the stored access token
+/// while it is valid, and mint a fresh one from the refresh token otherwise.
+/// The `steamLoginSecure` cookie is `steamid||access_token`; the community site
+/// does not accept a refresh token in its place.
 async fn community_token(account: &Account) -> Result<String, ConfirmError> {
+    // Access tokens last about 24 hours. Keep a minute of headroom so one does
+    // not expire mid-request.
+    if !account.access_token.is_empty() {
+        if seconds_until_expiry(&account.access_token).unwrap_or(0) > 60 {
+            return Ok(account.access_token.clone());
+        }
+    }
+
     if account.refresh_token.is_empty() {
         return Err(ConfirmError(
-            "This account file has no session token, so confirmations cannot be \
-             fetched. It was imported rather than enrolled here, or predates the \
-             token being stored. Re-enrolling the authenticator would add one."
+            "This account file has no login token, so confirmations cannot be \
+             fetched. Sign in again in the app that created it — or re-enroll \
+             here — to store one."
+                .into(),
+        ));
+    }
+    if seconds_until_expiry(&account.refresh_token).unwrap_or(1) < 0 {
+        return Err(ConfirmError(
+            "The saved login for this account has expired. Sign in again to \
+             refresh it."
                 .into(),
         ));
     }
@@ -142,19 +169,11 @@ async fn community_token(account: &Account) -> Result<String, ConfirmError> {
     )
     .await
     .map_err(|e| {
-        // Observed, not guessed: with a valid unexpired refresh token (aud
-        // includes "renew", ~200 days left), this endpoint answers EResult 15
-        // AccessDenied — as does login.steampowered.com/jwt/finalizelogin, and
-        // as does using the refresh token directly as steamLoginSecure
-        // (needauth: true). The enrollment token appears not to be accepted for
-        // creating a community session, so confirmations need a separate web
-        // login that this app does not yet perform.
         ConfirmError(format!(
-            "Steam would not open a web session for this account ({e}).\n\n\
-             Confirmations need a steamcommunity.com session, and the login \
-             token saved during enrollment is not accepted for one. This is a \
-             known gap — the rest of the app is unaffected, and codes keep \
-             working. Approve trades from the phone app for now."
+            "Steam would not issue a web session for this account ({e}).\n\n\
+             The saved login may have been invalidated — signing out everywhere, \
+             changing the password, or Steam retiring the token all do this. \
+             Signing in again refreshes it. Codes are unaffected."
         ))
     })?;
 
@@ -220,10 +239,13 @@ pub async fn fetch(account: &Account) -> Result<Vec<ConfirmationView>, ConfirmEr
     require_identity(account)?;
     let token = community_token(account).await?;
 
+    // The tag for getlist is "conf", not "list". The tag is signed into `k`,
+    // so the wrong one produces a signature Steam rejects as needauth — which
+    // reads like a session problem and sends you hunting in the wrong place.
     let response = client()?
         .get(format!("{COMMUNITY}/mobileconf/getlist"))
         .header("Cookie", cookies(account, &token))
-        .query(&signed_params(account, "list")?)
+        .query(&signed_params(account, "conf")?)
         .send()
         .await?;
 
@@ -332,6 +354,7 @@ mod tests {
             revocation_code: "R12345".into(),
             device_id: String::new(),
             refresh_token: "refresh".into(),
+            access_token: String::new(),
             path: PathBuf::from("x.maFile"),
         }
     }
@@ -353,6 +376,41 @@ mod tests {
         assert_eq!(map["a"], "76561198000000000");
         assert!(map["p"].starts_with("android:"));
         assert!(!map["k"].is_empty());
+    }
+
+    #[test]
+    fn getlist_signs_the_conf_tag_not_list() {
+        // The tag is signed into `k`. "list" reads like the obvious choice and
+        // is wrong: Steam answers needauth, which looks like a session problem
+        // and sends you hunting in entirely the wrong place. The reference
+        // implementation defaults this parameter to "conf".
+        let params = signed_params(&account(), "conf").unwrap();
+        let map: std::collections::HashMap<_, _> = params.into_iter().collect();
+        assert_eq!(map["tag"], "conf");
+
+        let time = 1_600_000_000;
+        assert_ne!(
+            totp::generate_confirmation_key(SECRET, "conf", time).unwrap(),
+            totp::generate_confirmation_key(SECRET, "list", time).unwrap()
+        );
+    }
+
+    #[test]
+    fn jwt_expiry_is_read_from_the_payload() {
+        // {"exp": 4102444800} — 1 Jan 2100, base64url, unpadded.
+        let payload = URL_SAFE_NO_PAD.encode(br#"{"exp":4102444800}"#);
+        let token = format!("header.{payload}.signature");
+        assert!(seconds_until_expiry(&token).unwrap() > 0);
+
+        let past = URL_SAFE_NO_PAD.encode(br#"{"exp":946684800}"#); // 2000
+        assert!(seconds_until_expiry(&format!("h.{past}.s")).unwrap() < 0);
+    }
+
+    #[test]
+    fn malformed_tokens_do_not_panic() {
+        for bad in ["", "notajwt", "a.b", "a.!!!.c"] {
+            assert!(seconds_until_expiry(bad).is_none() || seconds_until_expiry(bad).is_some());
+        }
     }
 
     #[test]

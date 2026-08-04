@@ -39,8 +39,26 @@ want certainty, or build from source below.
 - Light and dark themes, following Windows by default.
 - Corrects for clock drift against Steam's time API — a local clock off by
   ~30 seconds produces codes Steam rejects.
+- **Trade and market confirmations** — approve or deny individually, or confirm
+  everything at once.
 - Fully keyboard operable, and it respects reduced-motion and high-contrast
   settings.
+
+## Confirmations
+
+Approving trades needs more than the code secret: it needs the account's
+`identity_secret` (a separate secret in the same `.maFile`) and a live
+steamcommunity.com session derived from the login tokens stored at enrollment.
+
+Those tokens expire — the access token after about a day, the refresh token
+after roughly 200 — and Steam invalidates them early if you sign out
+everywhere or change the password. When that happens the app says so and
+offers **Sign in again**, also available any time under **Account**.
+
+Only the password is needed. The app holds the account's `shared_secret`, so it
+generates and submits the Steam Guard code itself. Refreshed tokens are written
+back into the `.maFile`, rewriting only the `Session` block via a temp file and
+rename, so an interrupted save cannot damage the authenticator.
 
 ## Creating an authenticator
 
@@ -71,13 +89,11 @@ Files it creates carry a `manifest.json`, so the original SDA can read them too.
 
 ## Known limitations
 
-- **Trade and market confirmations do not work.** The code is written and
-  tested but the section is disabled, because Steam will not grant this app a
-  `steamcommunity.com` session using the token saved at enrollment — `EResult
-  15` from both `GenerateAccessTokenForApp` and `login.steampowered.com/jwt/finalizelogin`,
-  and `needauth` when the refresh token is used directly as `steamLoginSecure`.
-  Finishing it needs the app to perform its own web login. Approve trades from
-  the phone app for now.
+- **Confirmations are new and unproven.** The request signing and session
+  handling match the reference implementation, but a successful live fetch has
+  not been observed from here — the accounts available for testing had stale
+  session tokens. If it fails, the error names the reason and offers a
+  sign-in, rather than shrugging.
 - The enrollment flow's offline parts are well covered by tests, but **the live
   conversation with Steam is not automatically tested** — that needs real
   credentials and an activation code. It has been run successfully against live

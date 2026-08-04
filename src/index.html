@@ -47,20 +47,11 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-shield"/></svg>
           <span>Codes</span>
         </button>
-        <!--
-          Confirmations is built but parked: Steam refuses a community session
-          for the token saved at enrollment (EResult 15 from both
-          GenerateAccessTokenForApp and jwt/finalizelogin; needauth from
-          mobileconf directly), so the section could only ever show an error.
-          The Rust module, its tests and the view below are all intact — undo
-          this comment to bring it back once a web login exists.
         <button class="nav-item" data-view="confirmations">
           <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-swap"/></svg>
           <span>Confirmations</span>
           <em class="badge hidden" id="conf-badge">0</em>
         </button>
-        -->
-        <em class="badge hidden" id="conf-badge">0</em>
         <button class="nav-item" data-view="account">
           <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-user"/></svg>
           <span>Account</span>
@@ -147,6 +138,12 @@
         <section class="view" id="view-account">
           <div class="card glass" id="account-card">
             <div class="grid" id="account-grid"></div>
+            <div class="actions">
+              <button class="btn ghost small" id="account-relogin">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-key"/></svg>
+                <span>Sign in again</span>
+              </button>
+            </div>
           </div>
           <div class="card glass danger-card" id="revocation-card">
             <div class="card-head">
@@ -215,6 +212,25 @@
       <div>Sign in</div><div>Confirm</div><div>Attach</div><div>Activate</div>
     </div>
     <div class="dialog-body" id="wizard-body"></div>
+  </dialog>
+
+  <!-- ------------------------------------------------------ sign in again -->
+  <dialog id="relogin-dialog" aria-labelledby="relogin-title">
+    <div class="dialog-body">
+      <h2 id="relogin-title">Sign in again</h2>
+      <p id="relogin-intro">Steam no longer accepts the saved login for this
+         account. Signing in refreshes it.</p>
+      <p class="faint">Only the password is needed — the Steam Guard code is
+         generated here from the account's own secret. Your password is used for
+         the one login call and is never saved.</p>
+      <label for="relogin-account">Account</label>
+      <input type="text" id="relogin-account" readonly />
+      <label for="relogin-password">Password</label>
+      <input type="password" id="relogin-password" autocomplete="off" />
+      <p id="relogin-error" role="alert" style="color:var(--danger)"></p>
+      <button class="btn primary" id="relogin-ok">Sign in</button>
+      <button class="btn ghost" id="relogin-cancel">Cancel</button>
+    </div>
   </dialog>
 
   <dialog id="passkey-dialog" aria-labelledby="passkey-title">

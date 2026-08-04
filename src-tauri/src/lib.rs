@@ -201,6 +201,41 @@ async fn respond_to_confirmation(
         .map_err(|e| e.to_string())
 }
 
+/// Sign in again for an account whose saved session has stopped working, and
+/// write the refreshed tokens back to its .maFile.
+#[tauri::command]
+async fn relogin(
+    index: usize,
+    password: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let (name, secret, path) = {
+        let accounts = state.accounts.lock().unwrap();
+        let a = accounts.get(index).ok_or("no such account")?;
+        (a.account_name.clone(), a.shared_secret.clone(), a.path.clone())
+    };
+    if name.is_empty() {
+        return Err("This account file has no account name to sign in with.".into());
+    }
+
+    let (access, refresh) = enroll::refresh_session(&name, &password, &secret)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    mafile::update_session_tokens(&path, &access, &refresh).map_err(|e| e.to_string())?;
+
+    // Reload so the in-memory account carries the new tokens.
+    let reloaded = mafile::load_mafile(&path, state.passkey.lock().unwrap().as_deref())
+        .map_err(|e| e.to_string())?;
+    {
+        let mut accounts = state.accounts.lock().unwrap();
+        if let Some(slot) = accounts.get_mut(index) {
+            *slot = reloaded;
+        }
+    }
+    Ok(name)
+}
+
 #[tauri::command]
 fn account_details(index: usize, state: State<AppState>) -> Result<AccountView, String> {
     let accounts = state.accounts.lock().unwrap();
@@ -229,6 +264,7 @@ pub fn run() {
             account_details,
             list_confirmations,
             respond_to_confirmation,
+            relogin,
             enroll::begin_login,
             enroll::submit_guard_code,
             enroll::poll_login,

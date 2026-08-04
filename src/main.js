@@ -157,14 +157,23 @@ function switchView(name) {
 const confList = $("conf-list");
 const confBadge = $("conf-badge");
 
-function confNotice(iconName, title, body, bad = false) {
+function confNotice(iconName, title, body, bad = false, signIn = false) {
   confList.innerHTML =
     `<div class="card glass notice${bad ? " bad" : ""}">` +
     `<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-${iconName}"/></svg>` +
-    `<h2></h2><p></p></div>`;
+    `<h2></h2><p></p>` +
+    (signIn ? `<div class="actions"><button class="btn primary" id="conf-signin">Sign in again</button></div>` : "") +
+    `</div>`;
   confList.querySelector("h2").textContent = title;
   confList.querySelector("p").textContent = body;
+  if (signIn) $("conf-signin").onclick = openRelogin;
   $("conf-bulk").classList.toggle("hidden", true);
+}
+
+/** Anything that means "Steam will not accept this session" — the cue to offer
+ *  a fresh sign-in rather than leaving a dead end. */
+function isSessionProblem(message) {
+  return /session|token|needauth|expired|sign in|access denied|log ?in/i.test(message);
 }
 
 function setConfBadge(count) {
@@ -186,9 +195,49 @@ async function loadConfirmations() {
     renderConfirmations();
   } catch (error) {
     setConfBadge(0);
-    confNotice("x", "Could not load confirmations", String(error), true);
+    const message = String(error);
+    confNotice("x", "Could not load confirmations", message, true,
+      isSessionProblem(message));
   }
 }
+
+// -------------------------------------------------------- sign in again
+
+const reloginDialog = $("relogin-dialog");
+
+function openRelogin() {
+  const account = state.accounts[state.selected];
+  if (!account) return;
+  $("relogin-account").value = account.account_name || account.label;
+  $("relogin-password").value = "";
+  $("relogin-error").textContent = "";
+  reloginDialog.showModal();
+  $("relogin-password").focus();
+}
+
+$("relogin-cancel").onclick = () => closeDialog(reloginDialog);
+$("relogin-password").onkeydown = (e) => { if (e.key === "Enter") $("relogin-ok").click(); };
+
+$("relogin-ok").onclick = async () => {
+  const button = $("relogin-ok");
+  const password = $("relogin-password").value;
+  if (!password) { $("relogin-error").textContent = "Enter your password."; return; }
+
+  button.disabled = true;
+  button.textContent = "Signing in…";
+  $("relogin-error").textContent = "";
+  try {
+    const name = await invoke("relogin", { index: state.selected, password });
+    closeDialog(reloginDialog);
+    setStatus(`Signed in again as ${name}`, "good");
+    loadConfirmations();
+  } catch (error) {
+    $("relogin-error").textContent = String(error);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Sign in";
+  }
+};
 
 function renderConfirmations() {
   const list = state.confirmations;
@@ -487,6 +536,8 @@ function renderAccount() {
     ? `${icon("eye-off")}<span>Hide</span>`
     : `${icon("eye")}<span>Reveal</span>`;
 }
+
+$("account-relogin").onclick = openRelogin;
 
 el.reveal.onclick = () => {
   state.revealed = !state.revealed;
@@ -842,7 +893,7 @@ el.wizard.addEventListener("close", () => {
 });
 
 // Escape would close instantly and skip the exit animation, so take it over.
-for (const dialog of [el.wizard, el.passkeyDialog]) {
+for (const dialog of [el.wizard, el.passkeyDialog, reloginDialog]) {
   dialog.addEventListener("cancel", (event) => {
     event.preventDefault();
     // Never abandon an enrollment request that is still in flight.
